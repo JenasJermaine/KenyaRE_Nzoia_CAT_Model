@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-roboto);
+  --font-display: var(--font-archivo);
+  --font-mono: var(--font-roboto-mono);
+  /* Kenya Re website: navy #041d3b, red #d11242, Roboto + Archivo. */
+  --color-ink: #041d3b;
+  --color-river: #d11242;
+  --color-river-50: #fff1f4;
+  --color-river-100: #ffdce5;
+  --color-lake: #041d3b;
+  --color-real: #0f766e;
+  --color-synthetic: #b45309;
+  --color-assumption: #6d28d9;
+  --color-ai: #b80f3a;
+}
+
+:root {
+  color-scheme: light;
+  --kenyare-navy: #041d3b;
+  --kenyare-red: #d11242;
+  --kenyare-grey: #696f6f;
+}
+
+body {
+  background:
+    radial-gradient(circle at 90% 5%, rgba(209, 18, 66, 0.045), transparent 24rem),
+    #f6f7f9;
+  color: var(--color-ink);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-archivo), sans-serif;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition-duration: 160ms;
+}
+
+::selection {
+  background: #ffdce5;
+  color: #041d3b;
+}
+
+.leaflet-container {
+  font-family: var(--font-roboto), system-ui, sans-serif;
+  background: #e8edf2;
+}
+
+.prose-briefing h2 {
+  font-size: 0.95rem;
+  font-weight: 650;
+  margin-top: 1.1rem;
+  margin-bottom: 0.35rem;
+  color: var(--color-lake);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.prose-briefing p {
+  margin: 0.4rem 0;
+  line-height: 1.6;
+}
+.prose-briefing ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+  margin: 0.3rem 0;
+}
+.prose-briefing li {
+  margin: 0.2rem 0;
+  line-height: 1.55;
+}
+.prose-briefing blockquote {
+  border-left: 3px solid var(--color-synthetic);
+  background: #fff7ed;
+  padding: 0.4rem 0.8rem;
+  margin: 0.6rem 0;
+  border-radius: 0 0.4rem 0.4rem 0;
+}
+.prose-briefing strong {
+  font-weight: 650;
+}
+
+input[type="range"] {
+  accent-color: var(--color-river);
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}

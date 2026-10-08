@@ -1,0 +1,16 @@
+id     ,stage        ,assumption                                                                                                                                   ,type               
+A-EXP-1,Exposure     ,"TIV recomputed as floor_area × cost_per_m2 (rounded KES 5,000); file column is 10× the documented value.                                     ",Data QA fix        
+A-EXP-2,Exposure     ,Quality index = position of cost_per_m2 within the published cost band of the class.                                                         ,Assumption         
+A-EXP-3,Exposure     ,Area labels and LLM geocoding use approximate town centroids (±2–3 km).                                                                      ,Assumption         
+A-HAZ-1,Hazard       ,Building depth = depth of the containing 925 m JRC cell (point sampling). Bilinear sampling reported as sensitivity.                         ,Method             
+A-HAZ-2,Hazard       ,No flooding at RP ≤ 2 (in-bank flow); depth linear in ln(RP) between published maps.                                                         ,Assumption         
+A-HAZ-3,Hazard       ,"Beyond RP500 depth extrapolated with the RP200→500 slope, capped at RP10,000.                                                                ",Assumption         
+A-VUL-1,Vulnerability,Shape from JRC/Huizinga (2017) Africa residential curve; global residential used as secondary source.                                        ,Published reference
+A-VUL-2,Vulnerability,"Class plinth heights, depth multipliers and ceilings (75–95%) are expert judgement.                                                          ",Assumption         
+A-VUL-3,Vulnerability,"ML model trained on 30,000 synthetic pseudo-claims; it reproduces the encoded assumptions plus their uncertainty, not real claims experience.",Synthetic          
+A-VUL-4,Vulnerability,Flood duration default 7 days (Budalangi floods often stand for 1–3 weeks).                                                                  ,Assumption         
+A-FIN-1,Financial    ,Each JRC map treated as one basin-wide event (full spatial correlation of hazard).                                                           ,Assumption         
+A-FIN-2,Financial    ,"Illustrative terms: 2% TIV deductible, 100% limit, Cat XL KES 20M xs 20M, no quota share.                                                    ",Assumption         
+A-FIN-3,Financial    ,One dominant river flood per year (annual maximum); AEP = OEP.                                                                               ,Assumption         
+A-FIN-4,Financial    ,"Secondary uncertainty correlated across buildings with a Gaussian copula, ρ = 0.3.                                                           ",Assumption         
+A-FIN-5,Financial    ,"Losses cover the structure only — no contents, business interruption, or demand surge.                                                       ",Scope              
