@@ -9,6 +9,7 @@ import { OfferInput } from "@/components/desk/OfferInput";
 import { OfferLosses } from "@/components/desk/OfferLosses";
 import { useModel } from "@/components/ModelProvider";
 import { Callout, cx } from "@/components/ui";
+import { sendJson } from "@/lib/api";
 import { fmtKes } from "@/lib/format";
 import { expandGroup } from "@/lib/geo";
 import type { PhotoItem } from "@/lib/photos";
@@ -54,13 +55,11 @@ export default function UnderwritingDesk() {
     setErr(null);
     setAccepted(null);
     try {
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, forceRules, images: forceRules ? [] : photos.map(({ name, mimeType, data }) => ({ name, mimeType, data })) }),
+      const j = await sendJson<IngestResponse>("/api/ingest", {
+        text,
+        forceRules,
+        images: forceRules ? [] : photos.map(({ name, mimeType, data }) => ({ name, mimeType, data })),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Request failed");
       setSentPhotos(forceRules ? [] : photos);
       setResp(j);
       setGroups(j.groups);
@@ -90,7 +89,7 @@ export default function UnderwritingDesk() {
     setSaving(true);
     setErr(null);
     try {
-      await addIngested(preview);
+      await addIngested(batchId, preview, resp?.sourceHash);
       setAccepted(`${preview.length} building(s), ${fmtKes(preview.reduce((a, b) => a + b.tiv, 0))} insured value, batch ${batchId}`);
       reset();
       setPhotos([]);
@@ -150,6 +149,23 @@ export default function UnderwritingDesk() {
           title="What the AI read from it"
           lead="One row per building type. Quotes show the exact text each row came from; tags show which values are stated, read from a photo, inferred, or filled with model defaults."
         >
+          {!!resp.security?.flags.length && (
+            <div className="mb-4">
+              <Callout tone="warn" title="This submission contains text aimed at the AI">
+                <p>
+                  Parts of the document read like instructions to an AI rather than a property description. The AI was told to treat them as data and
+                  ignore them, but check every value below against the original before accepting.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {resp.security.flags.map((f) => (
+                    <li key={f.reason}>
+                      {f.reason}: <q className="text-grey">{f.excerpt}</q>
+                    </li>
+                  ))}
+                </ul>
+              </Callout>
+            </div>
+          )}
           <ExtractedBuildings
             resp={resp}
             groups={groups}

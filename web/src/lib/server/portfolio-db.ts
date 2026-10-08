@@ -1,34 +1,7 @@
 import "server-only";
 
-import fs from "node:fs";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import type { Building } from "@/lib/types";
-
-const dbPath = process.env.NZOIA_DB_PATH
-  ? path.resolve(process.env.NZOIA_DB_PATH)
-  : path.join(process.cwd(), "data", "nzoia.sqlite");
-
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-
-const globalDb = globalThis as typeof globalThis & { __nzoiaDb?: DatabaseSync };
-const db = globalDb.__nzoiaDb ?? new DatabaseSync(dbPath);
-if (process.env.NODE_ENV !== "production") globalDb.__nzoiaDb = db;
-
-db.exec(`
-  PRAGMA journal_mode = DELETE;
-  PRAGMA busy_timeout = 5000;
-
-  CREATE TABLE IF NOT EXISTS ingested_buildings (
-    id TEXT PRIMARY KEY,
-    batch_id TEXT NOT NULL,
-    payload TEXT NOT NULL CHECK (json_valid(payload)),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_ingested_buildings_batch
-    ON ingested_buildings(batch_id);
-`);
+import { db, transaction } from "./db";
 
 const selectAll = db.prepare(`
   SELECT payload
@@ -41,26 +14,37 @@ const insertOne = db.prepare(`
   VALUES (?, ?, ?)
 `);
 
+const countAll = db.prepare("SELECT COUNT(*) AS n FROM ingested_buildings");
+const countBatch = db.prepare("SELECT COUNT(*) AS n FROM ingested_buildings WHERE batch_id = ?");
+const deleteBatch = db.prepare("DELETE FROM ingested_buildings WHERE batch_id = ?");
+const deleteAll = db.prepare("DELETE FROM ingested_buildings");
+
+const count = (stmt: ReturnType<typeof db.prepare>, ...args: string[]) => Number((stmt.get(...args) as { n: number }).n);
+
 export function readIngestedBuildings(): Building[] {
   return selectAll.all().map((row) => JSON.parse(String((row as { payload: string }).payload)) as Building);
 }
 
-/** Atomically replaces the working AI-ingested portfolio. The original 500 rows remain in portfolio.json. */
-export function replaceIngestedBuildings(buildings: Building[]) {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    db.exec("DELETE FROM ingested_buildings");
-    for (const building of buildings) {
-      insertOne.run(building.id, building.batchId!, JSON.stringify(building));
-    }
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+export function ingestedCount() {
+  return count(countAll);
 }
 
-export function portfolioDbPath() {
-  const relative = path.relative(process.cwd(), dbPath);
-  return relative && !relative.startsWith("..") ? relative.replaceAll("\\", "/") : dbPath;
+export function batchExists(batchId: string) {
+  return count(countBatch, batchId) > 0;
+}
+
+/** Adds one accepted offer. The original 500 rows stay in portfolio.json and are never written here. */
+export function insertBatch(buildings: Building[]) {
+  transaction(() => {
+    for (const building of buildings) insertOne.run(building.id, building.batchId!, JSON.stringify(building));
+  });
+}
+
+/** Returns the number of buildings removed. */
+export function removeBatch(batchId: string) {
+  return Number(deleteBatch.run(batchId).changes);
+}
+
+export function removeAllIngested() {
+  return Number(deleteAll.run().changes);
 }

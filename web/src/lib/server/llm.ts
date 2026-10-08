@@ -44,6 +44,8 @@ export interface ChatMessage {
 
 interface ChatOptions {
   json?: boolean;
+  /** Gemini only: OpenAPI-subset schema the response must follow (ignored by OpenAI-compatible backends). */
+  responseSchema?: object;
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
@@ -55,16 +57,46 @@ export interface ChatResult {
   model: string;
 }
 
+export type LlmErrorKind = "not_configured" | "rate_limited" | "unavailable" | "timeout" | "network" | "auth" | "blocked" | "empty" | "upstream";
+
+/** Failure with a category the API routes can turn into a user-facing explanation; `message` is for server logs only. */
+export class LlmError extends Error {
+  constructor(
+    public kind: LlmErrorKind,
+    message: string,
+  ) {
+    super(message);
+    this.name = "LlmError";
+  }
+}
+
+function statusKind(status: number): LlmErrorKind {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429) return "rate_limited";
+  if (status === 404 || status >= 500) return "unavailable";
+  return "upstream";
+}
+
+async function send(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    const name = (err as Error).name;
+    if (name === "TimeoutError" || name === "AbortError") throw new LlmError("timeout", `LLM request timed out: ${url}`);
+    throw new LlmError("network", `LLM request could not be sent: ${(err as Error).message}`);
+  }
+}
+
 export async function chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResult> {
   const cfg = llmConfig();
-  if (!cfg.enabled) throw new Error("LLM not configured");
+  if (!cfg.enabled) throw new LlmError("not_configured", "LLM not configured");
   return cfg.provider === "gemini" ? chatGemini(cfg, messages, opts) : chatOpenAi(cfg, messages, opts);
 }
 
 type Config = ReturnType<typeof llmConfig>;
 
 async function chatOpenAi(cfg: Config, messages: ChatMessage[], opts: ChatOptions): Promise<ChatResult> {
-  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  const res = await send(`${cfg.baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
     body: JSON.stringify({
@@ -88,11 +120,11 @@ async function chatOpenAi(cfg: Config, messages: ChatMessage[], opts: ChatOption
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`LLM request failed (${res.status}): ${body.slice(0, 300)}`);
+    throw new LlmError(statusKind(res.status), `LLM request failed (${res.status}): ${body.slice(0, 300)}`);
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("LLM returned an empty response");
+  if (!content) throw new LlmError("empty", "LLM returned an empty response");
   return { text: content, model: cfg.model };
 }
 
@@ -126,11 +158,12 @@ async function chatGemini(cfg: Config, messages: ChatMessage[], opts: ChatOption
       temperature: opts.temperature ?? 0.1,
       maxOutputTokens: (opts.maxTokens ?? 1800) + GEMINI_THINKING_HEADROOM,
       ...(opts.json ? { responseMimeType: "application/json" } : {}),
+      ...(opts.json && opts.responseSchema ? { responseSchema: opts.responseSchema } : {}),
     },
   });
 
   const call = (model: string) =>
-    fetch(`${cfg.baseUrl}/models/${encodeURIComponent(model)}:generateContent`, {
+    send(`${cfg.baseUrl}/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.apiKey },
       body,
@@ -139,6 +172,7 @@ async function chatGemini(cfg: Config, messages: ChatMessage[], opts: ChatOption
 
   const models = [cfg.model, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== cfg.model)];
   const skipped: string[] = [];
+  let sawRateLimit = false;
   for (const model of models) {
     let res = await call(model);
     if (res.status === 503 || res.status === 500) {
@@ -146,22 +180,26 @@ async function chatGemini(cfg: Config, messages: ChatMessage[], opts: ChatOption
       res = await call(model);
     }
     if (res.status === 404 || res.status === 429 || res.status === 503 || res.status === 500) {
+      sawRateLimit ||= res.status === 429;
       skipped.push(`${model}: ${res.status === 404 ? "not available" : res.status === 429 ? "rate-limited" : "overloaded"}`);
       continue;
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Gemini request failed (${res.status}, ${model}): ${text.slice(0, 300)}`);
+      throw new LlmError(statusKind(res.status), `Gemini request failed (${res.status}, ${model}): ${text.slice(0, 300)}`);
     }
     const data = (await res.json()) as GeminiResponse;
-    if (data.promptFeedback?.blockReason) throw new Error(`Gemini blocked the prompt (${data.promptFeedback.blockReason})`);
+    if (data.promptFeedback?.blockReason) throw new LlmError("blocked", `Gemini blocked the prompt (${data.promptFeedback.blockReason})`);
     const candidate = data.candidates?.[0];
     const content = (candidate?.content?.parts ?? [])
       .filter((p) => !p.thought && p.text)
       .map((p) => p.text)
       .join("");
-    if (!content) throw new Error(`Gemini returned an empty response (finishReason: ${candidate?.finishReason ?? "unknown"})`);
+    if (!content) {
+      const reason = candidate?.finishReason ?? "unknown";
+      throw new LlmError(reason === "SAFETY" || reason === "PROHIBITED_CONTENT" ? "blocked" : "empty", `Gemini returned an empty response (finishReason: ${reason})`);
+    }
     return { text: content, model };
   }
-  throw new Error(`No Gemini model could answer (${skipped.join("; ")}). Free-tier spikes are usually temporary — retry shortly.`);
+  throw new LlmError(sawRateLimit ? "rate_limited" : "unavailable", `No Gemini model could answer (${skipped.join("; ")})`);
 }

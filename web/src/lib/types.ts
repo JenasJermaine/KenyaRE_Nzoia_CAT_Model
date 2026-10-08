@@ -264,4 +264,21 @@ export interface IngestResponse {
   model: string | null;
   /** Number of photos sent and whether the extractor could read them. */
   photos?: { sent: number; read: boolean };
+  /** SHA-256 of the submitted text and photos, recorded in the audit trail when the offer is accepted. */
+  sourceHash?: string;
+  /** Phrases in the submission that look like instructions aimed at the AI. */
+  security?: { flags: { reason: string; excerpt: string }[] };
+}
+
+export const AUDIT_ACTIONS = ["sign_in", "sign_in_failed", "sign_out", "ingest", "offer_accepted", "batch_removed", "portfolio_reset", "briefing"] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+export interface AuditEvent {
+  id: number;
+  /** ISO timestamp (UTC). */
+  at: string;
+  action: AuditAction;
+  actor: string;
+  batchId: string | null;
+  detail: Record<string, unknown>;
 }

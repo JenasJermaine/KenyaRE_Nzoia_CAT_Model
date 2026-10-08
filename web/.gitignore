@@ -34,6 +34,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local database: accepted offers and the audit trail (names, IP addresses). Recreated automatically on first run.
+/data/*.sqlite
+/data/*.sqlite-journal
+
 # vercel
 .vercel
 

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useModel } from "./ModelProvider";
 import { SettingsPanel } from "./SettingsPanel";
+import { SignIn } from "./SignIn";
 import { cx, Spinner } from "./ui";
 
 const NAV = [
@@ -16,7 +17,8 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const { data, error, llm, ingested, settings, mcRunning } = useModel();
+  const { data, error, llm, ingested, settings, mcRunning, auth, signOut } = useModel();
+  const needsSignIn = auth?.required === true && !auth.user;
   const [open, setOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -81,6 +83,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className={cx("h-2 w-2", llm?.llm ? "bg-ink" : "bg-river")} />
               {llm == null ? "LLM: …" : llm.llm ? `LLM: ${llm.model}` : "LLM: offline fallback"}
             </span>
+            {auth?.user && (
+              <span className="hidden items-center gap-2 border-l border-slate-200 pl-3 text-[12px] text-ink md:inline-flex">
+                <span>
+                  Signed in as <b>{auth.user}</b>
+                </span>
+                <button type="button" onClick={() => void signOut()} className="text-river hover:underline">
+                  Sign out
+                </button>
+              </span>
+            )}
+            {auth?.required === false && (
+              <span
+                title="Set APP_ACCESS_TOKEN in web/.env.local to require a passcode before anyone can use the AI or change the portfolio."
+                className="hidden border border-river px-2 py-0.5 text-[11px] font-medium text-river md:inline-flex"
+              >
+                No passcode set
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setOpen(true)}
@@ -131,6 +151,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="border border-river bg-river-50 p-6 text-ai">
             <b>Model artefacts could not be loaded.</b> {error}
           </div>
+        ) : needsSignIn ? (
+          <SignIn />
         ) : (
           <>
             {!data && (

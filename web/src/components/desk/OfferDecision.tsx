@@ -7,6 +7,7 @@ import { MapView } from "@/components/MapView";
 import { useModel } from "@/components/ModelProvider";
 import { Callout, Spinner, Td, Th } from "@/components/ui";
 import type { BriefingPayload } from "@/lib/briefing";
+import { sendJson } from "@/lib/api";
 import { buildingLossAtRp, epCurve, waterfallAtRp } from "@/lib/engine";
 import { fmtKes, fmtPct } from "@/lib/format";
 import type { ExpandedGroup } from "@/lib/geo";
@@ -36,6 +37,7 @@ export function OfferDecision({
   const [briefBusy, setBriefBusy] = useState(false);
   const [brief, setBrief] = useState<{ markdown: string; mode: string; model: string | null; warning?: string } | null>(null);
   const [briefPayload, setBriefPayload] = useState<BriefingPayload | null>(null);
+  const [briefErr, setBriefErr] = useState<string | null>(null);
 
   const impact = useMemo(() => {
     if (!data || !det) return null;
@@ -61,13 +63,11 @@ export function OfferDecision({
     if (!payload) return;
     setBriefPayload(payload);
     setBriefBusy(true);
+    setBriefErr(null);
     try {
-      const r = await fetch("/api/briefing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload, forceTemplate }),
-      });
-      setBrief(await r.json());
+      setBrief(await sendJson<NonNullable<typeof brief>>("/api/briefing", { payload, forceTemplate }));
+    } catch (e) {
+      setBriefErr((e as Error).message);
     } finally {
       setBriefBusy(false);
     }
@@ -155,6 +155,7 @@ export function OfferDecision({
           </div>
         </div>
         {briefBusy && <Spinner label="Drafting briefing…" />}
+        {briefErr && <Callout tone="warn">{briefErr}</Callout>}
         {brief && (
           <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
             <div>
@@ -168,7 +169,9 @@ export function OfferDecision({
               </div>
               {brief.warning && <Callout tone="warn">{brief.warning}</Callout>}
               <article className="prose-briefing border border-slate-200 bg-white p-5 text-[14px] text-slate-800">
-                <ReactMarkdown>{brief.markdown}</ReactMarkdown>
+                <ReactMarkdown disallowedElements={["img"]} unwrapDisallowed>
+                  {brief.markdown}
+                </ReactMarkdown>
               </article>
             </div>
             <details className="border border-slate-200 bg-white p-4 text-xs">

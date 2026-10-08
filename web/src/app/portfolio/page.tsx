@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AuditTrail } from "@/components/AuditTrail";
 import { ClassBars, EpChart } from "@/components/charts";
 import { WaterfallBars, WaterfallTable } from "@/components/finance";
 import { MapView } from "@/components/MapView";
@@ -69,12 +70,9 @@ export default function PortfolioPage() {
           Original 500 buildings: <code>public/data/portfolio.json</code> (read-only)
         </span>
         <span>·</span>
-        <span>
-          Accepted offers: <code>{portfolioStorage?.file ?? "loading SQLite…"}</code>
-        </span>
-        <span className="text-slate-400">Copy this one database file to transfer accepted offers.</span>
+        <span>Accepted offers: {portfolioStorage ? "SQLite database on the server" : "loading…"}</span>
       </div>
-      {portfolioError && <Callout tone="warn" title="SQLite save failed">{portfolioError}</Callout>}
+      {portfolioError && <Callout tone="warn" title="The portfolio could not be updated">{portfolioError}</Callout>}
 
       <div className="sticky top-[calc(var(--header-h,180px)+8px)] z-[1050] -mx-2 flex flex-wrap items-center gap-3 border border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur">
         <span className="text-sm font-semibold text-ink">Flood scenario</span>
@@ -247,7 +245,13 @@ export default function PortfolioPage() {
             subtitle={settings.includeIngested ? "Included in every number above" : "Currently excluded — switch on in Model settings"}
             badges={<Badge kind="ai" />}
             right={
-              <button type="button" onClick={() => void clearIngested()} className="text-xs text-ai hover:underline">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Remove all ${ingested.length} accepted AI-ingested buildings? This is recorded in the audit trail.`)) clearIngested().catch(() => {});
+                }}
+                className="text-xs text-ai hover:underline"
+              >
                 Reset to original 500
               </button>
             }
@@ -256,7 +260,7 @@ export default function PortfolioPage() {
             {batches.map((b) => (
               <span key={b.id} className="inline-flex items-center gap-2 border border-river-100 bg-river-50 px-3 py-1.5 text-xs text-ai">
                 <b>Batch {b.id}</b> · {b.n} bldgs · {fmtKes(b.tiv)}
-                <button type="button" onClick={() => void removeBatch(b.id)} className="text-river hover:text-lake" aria-label="remove batch">
+                <button type="button" onClick={() => removeBatch(b.id).catch(() => {})} className="text-river hover:text-lake" aria-label="remove batch">
                   ✕
                 </button>
               </span>
@@ -264,6 +268,8 @@ export default function PortfolioPage() {
           </CardBody>
         </Card>
       )}
+
+      <AuditTrail />
 
       <Callout tone="warn" title="Why so few of the starter buildings flood">
         The 500 synthetic starter buildings were scattered at random over the whole 1.7° × 1.6° clip, while JRC flooding is confined to the Nzoia

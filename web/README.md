@@ -9,8 +9,11 @@ artefacts exported by `../notebooks/nzoia_flood_cat_model.ipynb`.
 ```bash
 npm install
 cp .env.example .env.local   # optional: add GEMINI_API_KEY or OPENAI_API_KEY to enable the LLM features
-npm run dev                  # http://localhost:3000
+npm run dev                  # http://localhost:3000 (this computer only)
 ```
+
+`npm run dev` and `npm start` listen on 127.0.0.1 only. To demo from another device on the same
+network, set `APP_ACCESS_TOKEN` first and use `npm run dev:lan` / `npm run start:lan`.
 
 Node 22.5 or newer is required because the app uses Node's built-in SQLite driver.
 
@@ -55,8 +58,9 @@ The portfolio has two separate layers:
 - `data/nzoia.sqlite` stores only buildings accepted from the Underwriting desk. It is created
   automatically. Copy this file with the project to transfer the working portfolio.
 
-The Portfolio page can remove one accepted batch or **Reset to original 500**, which clears only
-the SQLite table. On the first run after this change, any buildings in the old
+Accepting an offer adds one batch (`POST /api/portfolio`); the Portfolio page can remove one batch or
+**Reset to original 500** (`DELETE /api/portfolio?batch=ID` / `?all=1`), which clears only the SQLite
+table. A batch holds at most 1,000 buildings and the AI-ingested book at most 5,000. On the first run after this change, any buildings in the old
 `localStorage["nzoia.ingested.v1"]` store are migrated into SQLite and the browser copy is removed.
 Set `NZOIA_DB_PATH` to use a database file elsewhere.
 
@@ -100,3 +104,23 @@ condition (`good`/`fair`/`poor` → build quality 0.85/0.5/0.15) — and are tag
 When a photo contradicts the document, the document's value is kept and the conflict is flagged on the
 desk and in the briefing. The keyword parser ignores photos and says so. The "Proposal + site photo"
 example uses a CC BY-SA 4.0 Wikimedia Commons image (see `public/samples/ATTRIBUTION.txt`).
+
+## Security
+
+- **Access:** with `APP_ACCESS_TOKEN` set, users sign in with their name and the team passcode. The
+  session is a signed, HttpOnly, SameSite=Strict cookie valid for 12 hours. Every route that spends
+  AI quota, reads or changes the saved portfolio, or reads the audit trail checks it, and refuses
+  POST/DELETE requests coming from another website.
+- **Rate limits:** AI calls are limited to 10 per minute and 150 per day per client, with a shared
+  cap of 30 per minute and 600 per day. Sign-in is limited to 5 attempts per minute.
+- **Audit trail:** sign-ins, refused sign-ins, extractions (with a SHA-256 of the submitted text and
+  photos), accepted offers, removed batches, resets and briefings are written to the `audit_events`
+  table and shown on the Portfolio page.
+- **Errors:** users get a short explanation of the likely cause plus a reference code; the full error
+  is only written to the server log under that reference.
+- **Prompt injection:** submitted documents are wrapped in untrusted-data markers, and the model is told
+  to treat them as data. Gemini answers through a fixed JSON schema, and every value is re-validated.
+  A pattern scan flags instruction-like text with a red notice on the desk. Briefing payloads are
+  schema-checked; if they contain such text, the template briefing is used instead of the AI.
+- **Input validation:** every API body is validated with zod. Word files over 15 MB, or whose text
+  would inflate past 20 MB, are refused.
