@@ -41,7 +41,7 @@ export type Provenance = "real" | "synthetic" | "assumption" | "ai" | "derived";
 
 const PROV: Record<Provenance, { label: string; cls: string; tip: string }> = {
   real: { label: "Real data", cls: "border-ink bg-white text-ink", tip: "Measured/modelled by an external organisation (JRC)" },
-  synthetic: { label: "Synthetic", cls: "border-grey bg-paper text-grey", tip: "Generated for this hackathon — not a real portfolio" },
+  synthetic: { label: "Synthetic", cls: "border-grey bg-paper text-grey", tip: "Generated for this prototype — not a real portfolio" },
   assumption: { label: "Assumption", cls: "border-navy-300 bg-navy-50 text-navy-500", tip: "Modelling judgement, documented in the assumptions register" },
   ai: { label: "AI / ML", cls: "border-river bg-river-50 text-ai", tip: "Produced or changed by the ML model or the LLM" },
   derived: { label: "Model output", cls: "border-ink bg-ink text-white", tip: "Computed by the CAT model from the inputs above" },

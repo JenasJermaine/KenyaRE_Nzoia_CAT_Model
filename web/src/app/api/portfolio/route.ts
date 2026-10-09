@@ -1,11 +1,11 @@
 import { audit } from "@/lib/server/audit";
-import { requireUser } from "@/lib/server/auth";
+import { requireRoles } from "@/lib/server/auth";
 import { serverError } from "@/lib/server/errors";
 import { batchExists, ingestedCount, insertBatch, readIngestedBuildings, removeAllIngested, removeBatch } from "@/lib/server/portfolio-db";
 import { addBatchSchema, batchIdSchema, describeIssue, MAX_INGESTED_BUILDINGS } from "@/lib/server/schemas";
 
 export async function GET(request: Request) {
-  const guard = requireUser(request);
+  const guard = requireRoles(request, ["underwriter"]);
   if (!guard.ok) return guard.response;
   try {
     return Response.json({ buildings: readIngestedBuildings(), storage: "sqlite" });
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
 /** Adds one accepted offer as a new batch. The immutable starter portfolio is never written to this database. */
 export async function POST(request: Request) {
-  const guard = requireUser(request);
+  const guard = requireRoles(request, ["underwriter"]);
   if (!guard.ok) return guard.response;
   const parsed = addBatchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
 /** `?batch=ID` removes one batch; `?all=1` removes every AI-ingested building. */
 export async function DELETE(request: Request) {
-  const guard = requireUser(request);
+  const guard = requireRoles(request, ["underwriter"]);
   if (!guard.ok) return guard.response;
   const params = new URL(request.url).searchParams;
   try {

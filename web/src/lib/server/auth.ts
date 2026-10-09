@@ -1,14 +1,13 @@
 import "server-only";
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { roleForEmail, type UserRole } from "../roles";
 
 export const SESSION_COOKIE = "nzoia_session";
 export const SESSION_HOURS = 12;
-export const OPEN_MODE_ACTOR = "local user (no passcode set)";
+const passcode = () => process.env.NZOIA_DEMO_PASSWORD?.trim() || process.env.APP_ACCESS_TOKEN?.trim() || "nzoia-demo";
 
-const passcode = () => process.env.APP_ACCESS_TOKEN?.trim() || null;
-
-export const authRequired = () => passcode() != null;
+export const authRequired = () => true;
 
 /** Sessions are signed with a key derived from the passcode, so changing the passcode signs everyone out. */
 function sign(value: string) {
@@ -22,12 +21,11 @@ function safeEqual(a: string, b: string) {
 }
 
 export function passcodeMatches(candidate: string) {
-  const expected = passcode();
-  return expected != null && safeEqual(candidate, expected);
+  return safeEqual(candidate, passcode());
 }
 
-export function createSessionValue(name: string) {
-  const payload = `${Buffer.from(name, "utf8").toString("base64url")}.${Date.now()}`;
+export function createSessionValue(name: string, role: UserRole) {
+  const payload = `${Buffer.from(JSON.stringify({ name, role }), "utf8").toString("base64url")}.${Date.now()}`;
   return `${payload}.${sign(payload)}`;
 }
 
@@ -44,16 +42,29 @@ function readCookie(request: Request, name: string) {
   return null;
 }
 
-/** The signed-in user's name, or null when the cookie is missing, tampered with or expired. */
-export function sessionUser(request: Request): string | null {
-  if (!authRequired()) return null;
+function session(request: Request): { name: string; role: UserRole } | null {
   const raw = readCookie(request, SESSION_COOKIE);
   if (!raw) return null;
-  const [name, issued, sig] = raw.split(".");
-  if (!name || !issued || !sig || !safeEqual(sig, sign(`${name}.${issued}`))) return null;
+  const [payload, issued, sig] = raw.split(".");
+  if (!payload || !issued || !sig || !safeEqual(sig, sign(`${payload}.${issued}`))) return null;
   const age = Date.now() - Number(issued);
   if (!Number.isFinite(age) || age < 0 || age > SESSION_HOURS * 3600_000) return null;
-  return Buffer.from(name, "base64url").toString("utf8");
+  try {
+    const value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { name?: unknown; role?: unknown };
+    if (typeof value.name !== "string" || roleForEmail(value.name) !== value.role) return null;
+    return { name: value.name, role: value.role as UserRole };
+  } catch {
+    return null;
+  }
+}
+
+/** The signed-in user's email, or null when the cookie is missing, tampered with or expired. */
+export function sessionUser(request: Request): string | null {
+  return session(request)?.name ?? null;
+}
+
+export function sessionRole(request: Request): UserRole | null {
+  return session(request)?.role ?? null;
 }
 
 export function clientIp(request: Request) {
@@ -72,7 +83,7 @@ function sameOrigin(request: Request) {
   }
 }
 
-export type Guard = { ok: true; actor: string; ip: string } | { ok: false; response: Response };
+export type Guard = { ok: true; actor: string; role: UserRole; ip: string } | { ok: false; response: Response };
 
 /** Every route that reads client data, writes data or spends AI quota calls this first. */
 export function requireUser(request: Request): Guard {
@@ -80,13 +91,21 @@ export function requireUser(request: Request): Guard {
   if (request.method !== "GET" && !sameOrigin(request)) {
     return { ok: false, response: Response.json({ error: "This request came from another website and was refused.", code: "bad_origin" }, { status: 403 }) };
   }
-  if (!authRequired()) return { ok: true, actor: OPEN_MODE_ACTOR, ip };
   const user = sessionUser(request);
   if (!user) {
     return {
       ok: false,
-      response: Response.json({ error: "Your session has ended or you are not signed in. Sign in with the team passcode to continue.", code: "auth_required" }, { status: 401 }),
+      response: Response.json({ error: "Sign in with a demo account to continue.", code: "auth_required" }, { status: 401 }),
     };
   }
-  return { ok: true, actor: user, ip };
+  return { ok: true, actor: user, role: sessionRole(request)!, ip };
+}
+
+export function requireRoles(request: Request, roles: UserRole[]): Guard {
+  const guard = requireUser(request);
+  if (!guard.ok) return guard;
+  if (!roles.includes(guard.role)) {
+    return { ok: false, response: Response.json({ error: "Your demo role is not permitted to access this data.", code: "role_forbidden" }, { status: 403 }) };
+  }
+  return guard;
 }

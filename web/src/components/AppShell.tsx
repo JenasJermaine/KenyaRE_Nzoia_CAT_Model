@@ -3,22 +3,21 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useModel } from "./ModelProvider";
 import { SettingsPanel } from "./SettingsPanel";
 import { SignIn } from "./SignIn";
 import { cx, Spinner } from "./ui";
-
-const NAV = [
-  { href: "/", label: "Underwriting desk" },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/methodology", label: "Model & assumptions" },
-];
+import { pageAllowed, ROLE_HOME, ROLE_LABELS } from "@/lib/roles";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
+  const router = useRouter();
   const { data, error, llm, ingested, settings, mcRunning, auth, signOut } = useModel();
-  const needsSignIn = auth?.required === true && !auth.user;
+  const needsSignIn = !auth?.user || !auth.role;
+  const loginRoute = path === "/login";
+  const canView = auth?.role ? pageAllowed(path, auth.role) : false;
   const [open, setOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -29,6 +28,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => ro.disconnect();
   }, []);
   const nonDefault = settings.vulnModel !== "ml" || settings.hazardMode !== "point" || settings.duration !== 7;
+  const NAV = auth?.role === "underwriter"
+    ? [{ href: "/underwriter", label: "Underwriting desk" }, { href: "/portfolio", label: "Portfolio" }, { href: "/methodology", label: "Model & assumptions" }]
+    : auth?.role === "portfolio_manager"
+      ? [{ href: "/portfolio", label: "Exposure dashboard" }]
+      : auth?.role === "cedant"
+        ? [{ href: "/cedant", label: "Submission risk" }]
+        : auth?.role === "county"
+          ? [{ href: "/county", label: "Public flood risk" }]
+            : [];
+  const readFirst = auth?.role === "underwriter"
+    ? ["Hazard: real JRC river-flood depth maps", `Portfolio: synthetic, 500 generated buildings${ingested.length > 0 ? ` (+${ingested.length} AI-ingested, also synthetic)` : ", not a real client"}`, "Vulnerability & terms are assumptions documented on Model & assumptions"]
+    : auth?.role === "portfolio_manager"
+      ? ["Exposure summaries use a synthetic demo book", "Flood hazard: JRC river-flood depth maps", "Risk thresholds are illustrative"]
+      : auth?.role === "cedant"
+        ? ["Your submission only", "Flood hazard: JRC river-flood depth maps", "Risk estimates are not a quote"]
+        : auth?.role === "county"
+          ? ["Public flood-hazard information only", "Flood depth: JRC river-flood maps", "No insurer-specific exposure is shown"]
+          : ["Risk model prototype", "Exposure is synthetic", "Vulnerability and terms include assumptions"];
+
+  useEffect(() => {
+    if (!auth) return;
+    if (!auth.user && !loginRoute) router.replace("/login");
+    else if (auth.user && auth.role && loginRoute) router.replace(ROLE_HOME[auth.role]);
+    else if (auth.user && auth.role && !canView) router.replace(ROLE_HOME[auth.role]);
+  }, [auth, canView, loginRoute, router]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -52,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="hidden h-10 w-px bg-slate-200 sm:block" />
             <span className="leading-tight">
               <span className="block font-display text-[15px] font-semibold text-ink">Nzoia Flood CAT Model</span>
-              <span className="block text-[11px] text-slate-500">Underwriting decision support</span>
+              <span className="block text-[11px] text-slate-500">{auth?.role ? ROLE_LABELS[auth.role] : "Role-based risk views"}</span>
             </span>
           </Link>
           <nav className="hidden flex-1 items-center justify-center gap-1 overflow-x-auto lg:flex">
@@ -73,35 +97,32 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {mcRunning && <Spinner label="simulating" />}
-            <span
-              title={llm?.llm ? `Connected to ${llm.provider}` : "Set GEMINI_API_KEY or OPENAI_API_KEY to enable the LLM; rule-based fallback active"}
+            {auth?.role === "underwriter" || auth?.role === "cedant" ? <span
+              title={llm?.llm ? `An API key is configured for ${llm.provider}; it is validated only when a request is made.` : "Set GEMINI_API_KEY or OPENAI_API_KEY to enable the LLM; rule-based fallback active"}
               className={cx(
                 "hidden items-center gap-1.5 px-2 py-1 text-[11px] font-medium sm:inline-flex",
                 llm?.llm ? "text-ink" : "text-grey",
               )}
             >
               <span className={cx("h-2 w-2", llm?.llm ? "bg-ink" : "bg-river")} />
-              {llm == null ? "LLM: …" : llm.llm ? `LLM: ${llm.model}` : "LLM: offline fallback"}
-            </span>
-            {auth?.user && (
+              {llm == null ? "AI: …" : llm.llm ? `AI configured · ${llm.model}` : "AI unavailable · text fallback"}
+            </span> : null}
+            {auth?.user && auth.role && (
               <span className="hidden items-center gap-2 border-l border-slate-200 pl-3 text-[12px] text-ink md:inline-flex">
                 <span>
-                  Signed in as <b>{auth.user}</b>
+                  <b>{ROLE_LABELS[auth.role]}</b> · {auth.user}
                 </span>
                 <button type="button" onClick={() => void signOut()} className="text-river hover:underline">
                   Sign out
                 </button>
               </span>
             )}
-            {auth?.required === false && (
-              <span
-                title="Set APP_ACCESS_TOKEN in web/.env.local to require a passcode before anyone can use the AI or change the portfolio."
-                className="hidden border border-river px-2 py-0.5 text-[11px] font-medium text-river md:inline-flex"
-              >
-                No passcode set
+            {auth?.user && (
+              <span className="hidden border border-amber-700 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 md:inline-flex" title="Mock accounts are for this prototype only.">
+                DEMO · not production auth
               </span>
             )}
-            <button
+            {auth?.role === "underwriter" && <button
               type="button"
               onClick={() => setOpen(true)}
               className={cx(
@@ -112,7 +133,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             >
               Model settings{nonDefault ? " •" : ""}
-            </button>
+            </button>}
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto border-t border-slate-100 px-4 py-1.5 lg:hidden">
@@ -131,31 +152,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="border-t border-slate-200 bg-paper">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-1 px-6 py-1.5 text-[11px] text-grey">
-            <span className="font-semibold uppercase tracking-wide text-ink">Read this first</span>
-            <span>
-              <b className="text-ink">Hazard: real</b> JRC river-flood depth maps
-            </span>
-            <span>
-              <b className="text-ink">Portfolio: synthetic</b>, 500 generated buildings, not a real client
-              {ingested.length > 0 && ` (+${ingested.length} AI-ingested, also synthetic)`}
-            </span>
-            <span>
-              <b className="text-ink">Vulnerability &amp; terms: assumptions</b>, documented on the Model &amp; assumptions page
-            </span>
+            <span className="font-semibold uppercase tracking-wide text-ink">Role context</span>
+            {readFirst.map((item) => <span key={item}>{item}</span>)}
           </div>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-[1400px] flex-1 px-6 py-7">
-        {error ? (
+        {!auth ? (
+          <div className="grid h-[60vh] place-items-center"><Spinner label="Checking demo role…" /></div>
+        ) : error && auth.role === "underwriter" ? (
           <div className="border border-river bg-river-50 p-6 text-ai">
             <b>Model artefacts could not be loaded.</b> {error}
           </div>
+        ) : loginRoute ? (
+          children
         ) : needsSignIn ? (
           <SignIn />
+        ) : !canView ? (
+          <div className="border-l-4 border-river bg-river-50 p-5 text-sm text-ink">This view is not available to the selected demo role.</div>
         ) : (
           <>
-            {!data && (
+            {!data && auth.role === "underwriter" && (
               <div className="grid h-[60vh] place-items-center">
                 <Spinner label="Loading hazard rasters, portfolio and trained vulnerability model…" />
               </div>
@@ -173,7 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="text-[11px] leading-relaxed text-white/65 sm:text-right">
             Hazard: JRC Global River Flood Hazard Maps. Vulnerability adapted from Huizinga et al. (2017). Exposure is synthetic.
-            Hackathon prototype — not a production pricing tool.
+            Prototype — not a production pricing tool.
           </div>
         </div>
       </footer>

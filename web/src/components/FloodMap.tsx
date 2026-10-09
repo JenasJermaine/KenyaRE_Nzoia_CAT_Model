@@ -32,6 +32,7 @@ export default function FloodMap({
   maxTiv,
   height = 620,
   showOnlyWet = false,
+  showDetails = true,
 }: {
   buildings: MapBuilding[];
   overlay: "depth" | "zone" | "none";
@@ -42,6 +43,7 @@ export default function FloodMap({
   maxTiv: number;
   height?: number;
   showOnlyWet?: boolean;
+  showDetails?: boolean;
 }) {
   const imgRp = [10, 20, 50, 100, 200, 500].includes(rp) ? rp : 100;
   // cacheComponents keeps hidden routes in <Activity>, which tears down the Leaflet map but keeps react-leaflet's
@@ -95,10 +97,10 @@ export default function FloodMap({
                 fillOpacity: m.depth > 0 ? 0.92 : 0.55,
               }}
             >
-              <LTooltip direction="top" offset={[0, -4]}>
+              {showDetails && <LTooltip direction="top" offset={[0, -4]}>
                 {m.b.id} · {classLabels[m.b.cls]} · {m.depth > 0 ? `${m.depth.toFixed(2)} m` : "dry"}
-              </LTooltip>
-              <Popup>
+              </LTooltip>}
+              {showDetails && <Popup>
                 <div className="min-w-[220px] text-[12px] leading-relaxed">
                   <div className="mb-1 text-[13px] font-semibold">
                     {m.b.id} {ai && <span className="ml-1 bg-ink px-1 text-[10px] text-white">AI-ingested</span>}
@@ -124,7 +126,7 @@ export default function FloodMap({
                   {m.b.plinthExtra > 0 && <div>Raised floor: +{m.b.plinthExtra.toFixed(2)} m</div>}
                   {m.b.note && <div className="mt-1 italic text-slate-500">“{m.b.note}”</div>}
                 </div>
-              </Popup>
+              </Popup>}
             </CircleMarker>
           );
         })}

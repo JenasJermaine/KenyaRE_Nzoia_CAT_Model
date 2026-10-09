@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ExtractedBuildings } from "@/components/desk/ExtractedBuildings";
 import { OfferDecision } from "@/components/desk/OfferDecision";
 import { OfferExplain } from "@/components/desk/OfferExplain";
 import { OfferInput } from "@/components/desk/OfferInput";
 import { OfferLosses } from "@/components/desk/OfferLosses";
+import { OfferRiskReview } from "@/components/desk/OfferRiskReview";
 import { useModel } from "@/components/ModelProvider";
 import { Callout, cx } from "@/components/ui";
 import { sendJson } from "@/lib/api";
@@ -15,9 +16,9 @@ import { expandGroup } from "@/lib/geo";
 import type { PhotoItem } from "@/lib/photos";
 import type { Building, IngestGroup, IngestResponse } from "@/lib/types";
 
-function Step({ n, title, lead, tone = "plain", children }: { n: number; title: string; lead?: ReactNode; tone?: "plain" | "ai"; children: ReactNode }) {
+function Step({ n, title, lead, tone = "plain", id, children }: { n: number; title: string; lead?: ReactNode; tone?: "plain" | "ai"; id?: string; children: ReactNode }) {
   return (
-    <section className="border border-slate-200 bg-white">
+    <section id={id} className="border border-slate-200 bg-white">
       <header className="flex items-stretch border-b border-slate-200">
         <span className={cx("grid w-12 shrink-0 place-items-center font-display text-lg font-semibold text-white", tone === "ai" ? "bg-river" : "bg-ink")}>
           {String(n).padStart(2, "0")}
@@ -49,6 +50,12 @@ export default function UnderwritingDesk() {
   const [selected, setSelected] = useState(0);
   const [accepted, setAccepted] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [aiWarning, setAiWarning] = useState(false);
+  const [aiWarningDismissed, setAiWarningDismissed] = useState(false);
+
+  useEffect(() => {
+    if (resp) document.getElementById("offer-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [resp]);
 
   async function extract(forceRules: boolean) {
     setBusy(true);
@@ -60,6 +67,12 @@ export default function UnderwritingDesk() {
         forceRules,
         images: forceRules ? [] : photos.map(({ name, mimeType, data }) => ({ name, mimeType, data })),
       });
+      if (j.mode === "llm") {
+        setAiWarning(false);
+        setAiWarningDismissed(false);
+      } else if (!aiWarningDismissed && j.warnings.some((warning) => warning.startsWith("The AI extractor could not be used."))) {
+        setAiWarning(true);
+      }
       setSentPhotos(forceRules ? [] : photos);
       setResp(j);
       setGroups(j.groups);
@@ -131,6 +144,14 @@ export default function UnderwritingDesk() {
         </Callout>
       )}
 
+      {aiWarning && (
+        <Callout tone="warn" title="AI service unavailable">
+          The server&apos;s AI key was rejected. The keyword parser was used, and uploaded photos could not inform the extraction. An administrator must
+          correct <code>GEMINI_API_KEY</code> or <code>OPENAI_API_KEY</code> in <code>web/.env.local</code>.{" "}
+          <button type="button" onClick={() => { setAiWarning(false); setAiWarningDismissed(true); }} className="ml-2 font-semibold underline">Dismiss</button>
+        </Callout>
+      )}
+
       {accepted && (
         <Callout title="Offer accepted">
           Added {accepted} to the portfolio. <Link href="/portfolio" className="font-semibold text-river underline">See the updated book →</Link>
@@ -145,6 +166,7 @@ export default function UnderwritingDesk() {
       {resp && (
         <Step
           n={2}
+          id="offer-results"
           tone="ai"
           title="What the AI read from it"
           lead="One row per building type. Quotes show the exact text each row came from; tags show which values are stated, read from a photo, inferred, or filled with model defaults."
@@ -181,13 +203,16 @@ export default function UnderwritingDesk() {
 
       {ready && (
         <>
-          <Step n={3} title="What it could cost" lead="Losses at each return period, from physical damage (ground-up) to what the insurer keeps after reinsurance (net).">
+          <Step n={3} title="Offer-level loss analysis" lead="Aggregate losses across the full offer at each flood scenario. Step 5 is the individual building review.">
             <OfferLosses groups={groups} expanded={expanded} preview={preview} selected={selected} onSelect={setSelected} />
           </Step>
           <Step n={4} tone="ai" title="Why the model says so" lead="SHAP and LIME explanations of each building's damage ratio — the number every loss above is built on.">
             <OfferExplain groups={groups} expanded={expanded} selected={selected} onSelect={setSelected} />
           </Step>
-          <Step n={5} title="Decide" lead="See what the offer adds to the whole book, then accept or decline and get a written briefing.">
+          <Step n={5} title="Individual building risk" lead="Inspect one selected building’s insured value, JRC depth, damage ratio and loss. This is site-level detail; step 3 is the whole-offer total.">
+            <OfferRiskReview groups={groups} expanded={expanded} preview={preview} />
+          </Step>
+          <Step n={6} title="Decide" lead="See what the offer adds to the whole book, then accept or decline and get a written briefing.">
             <OfferDecision resp={resp} groups={groups} expanded={expanded} preview={preview} saving={saving} onAccept={accept} onDiscard={reset} />
           </Step>
         </>

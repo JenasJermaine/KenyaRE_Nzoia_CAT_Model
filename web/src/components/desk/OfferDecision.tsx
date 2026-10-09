@@ -3,12 +3,11 @@
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { termsSummary } from "@/components/finance";
-import { MapView } from "@/components/MapView";
 import { useModel } from "@/components/ModelProvider";
 import { Callout, Spinner, Td, Th } from "@/components/ui";
 import type { BriefingPayload } from "@/lib/briefing";
 import { sendJson } from "@/lib/api";
-import { buildingLossAtRp, epCurve, waterfallAtRp } from "@/lib/engine";
+import { epCurve, waterfallAtRp } from "@/lib/engine";
 import { fmtKes, fmtPct } from "@/lib/format";
 import type { ExpandedGroup } from "@/lib/geo";
 import { offerBriefing } from "@/lib/offer";
@@ -74,13 +73,10 @@ export function OfferDecision({
   }
 
   if (!data || !impact) return null;
-  const v = data.vulnerability;
-  const maxTiv = Math.max(...preview.map((b) => b.tiv), 1);
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 xl:grid-cols-[1fr_1.1fr]">
-        <div>
+      <div>
           <h3 className="mb-2 text-sm font-semibold">What accepting this offer does to the book</h3>
           <table className="w-full overflow-hidden border border-slate-100">
             <thead className="bg-slate-50">
@@ -119,19 +115,6 @@ export function OfferDecision({
           <p className="mt-2 text-[11px] text-slate-500">
             Accepted buildings are stored as synthetic, AI-ingested rows in the exposure-file shape and appear on the Portfolio page.
           </p>
-        </div>
-        <div className="overflow-hidden border border-slate-200">
-          <MapView
-            buildings={preview.map((b) => ({ b, ...buildingLossAtRp(b, 100, v, settings) }))}
-            overlay="depth"
-            rp={100}
-            colorBy="loss"
-            classColors={v.classColors}
-            classLabels={v.classLabels}
-            maxTiv={maxTiv}
-            height={300}
-          />
-        </div>
       </div>
 
       <div className="border border-river-100 bg-navy-50 p-4">

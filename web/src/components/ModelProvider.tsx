@@ -15,6 +15,7 @@ import {
 import { api, AUTH_EXPIRED_EVENT, sendJson } from "@/lib/api";
 import { buildHazardIndex, type HazardIndex } from "@/lib/geo";
 import { CLASS_COLORS } from "@/lib/palette";
+import type { UserRole } from "@/lib/roles";
 import { DEFAULT_SETTINGS, type Building, type ExplainData, type ModelData, type Settings } from "@/lib/types";
 
 type RpRow = ReturnType<typeof rpTable>[number];
@@ -76,6 +77,7 @@ const loadExplain = () =>
 export interface AuthState {
   required: boolean;
   user: string | null;
+  role: UserRole | null;
 }
 
 const NONE: Building[] = [];
@@ -114,6 +116,8 @@ export function ModelProvider({ children }: { children: ReactNode }) {
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
+    if (auth?.role !== "underwriter") return;
+    let active = true;
     Promise.all([
       loadJson<ModelData["portfolio"]>("portfolio"),
       loadJson<ModelData["hazard"]>("hazard"),
@@ -123,6 +127,7 @@ export function ModelProvider({ children }: { children: ReactNode }) {
       loadExplain(),
     ])
       .then(([portfolio, hazard, vulnerability, results, gazetteer, explain]) => {
+        if (!active) return;
         try {
           const s = localStorage.getItem(SETTINGS_KEY);
           if (s) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(s) });
@@ -132,19 +137,30 @@ export function ModelProvider({ children }: { children: ReactNode }) {
         setHydrated(true);
         setData({ portfolio, hazard, vulnerability: { ...vulnerability, classColors: CLASS_COLORS }, results, gazetteer, explain });
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => active && setError(e.message));
+    return () => { active = false; };
+  }, [auth?.role]);
+
+  useEffect(() => {
     api<ModelState["llm"]>("/api/status")
       .then(setLlm)
       .catch(() => setLlm({ llm: false, model: null, provider: null }));
     api<AuthState>("/api/auth")
-      .then(setAuth)
-      .catch(() => setAuth({ required: true, user: null }));
-    const expired = () => setAuth((a) => (a ? { ...a, user: null } : a));
+      .then((state) => {
+        setAuth(state);
+        if (state.role !== "underwriter") setHydrated(true);
+      })
+      .catch(() => setAuth({ required: true, user: null, role: null }));
+    const expired = () => {
+      setAuth((a) => (a ? { ...a, user: null, role: null } : a));
+      setData(null);
+      setIngested(NONE);
+    };
     window.addEventListener(AUTH_EXPIRED_EVENT, expired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expired);
   }, []);
 
-  const signedIn = auth != null && (!auth.required || auth.user != null);
+  const signedIn = auth != null && auth.user != null && auth.role != null;
   const reloadIngested = useCallback(async () => {
     try {
       const stored = await loadIngested();
@@ -159,10 +175,11 @@ export function ModelProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (signedIn) void migrateLegacyIngested().then(reloadIngested);
-  }, [signedIn, reloadIngested]);
+    if (signedIn && auth?.role === "underwriter") void migrateLegacyIngested().then(reloadIngested);
+  }, [signedIn, auth?.role, reloadIngested]);
   // After sign-out the last loaded rows stay in state but are not shown.
-  const ingested = signedIn ? loadedIngested : NONE;
+  const canReadIngested = signedIn && auth?.role === "underwriter";
+  const ingested = canReadIngested ? loadedIngested : NONE;
 
   useEffect(() => {
     if (hydrated) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -228,6 +245,10 @@ export function ModelProvider({ children }: { children: ReactNode }) {
   }, []);
   const signOut = useCallback(async () => {
     setAuth(await api<AuthState>("/api/auth", { method: "DELETE" }));
+    setData(null);
+    setIngested(NONE);
+    setPortfolioStorage(null);
+    setPortfolioError(null);
   }, []);
 
   const value: ModelState = {
@@ -241,8 +262,8 @@ export function ModelProvider({ children }: { children: ReactNode }) {
     addIngested,
     removeBatch,
     clearIngested,
-    portfolioStorage: signedIn ? portfolioStorage : null,
-    portfolioError,
+    portfolioStorage: canReadIngested ? portfolioStorage : null,
+    portfolioError: canReadIngested ? portfolioError : null,
     auth,
     signIn,
     signOut,

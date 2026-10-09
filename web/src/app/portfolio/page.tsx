@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { AuditTrail } from "@/components/AuditTrail";
+import { PortfolioManagerDashboard } from "@/components/PortfolioManagerDashboard";
+import { UnderwriterWhatIf } from "@/components/UnderwriterWhatIf";
 import { ClassBars, EpChart } from "@/components/charts";
 import { WaterfallBars, WaterfallTable } from "@/components/finance";
 import { MapView } from "@/components/MapView";
@@ -24,6 +26,7 @@ export default function PortfolioPage() {
     clearIngested,
     portfolioStorage,
     portfolioError,
+    auth,
   } = useModel();
   const [rp, setRp] = useState(100);
 
@@ -38,6 +41,7 @@ export default function PortfolioPage() {
     };
   }, [data, portfolio, rp, settings]);
 
+  if (auth?.role === "portfolio_manager") return <PortfolioManagerDashboard />;
   if (!data || !det || !at) return null;
   const v = data.vulnerability;
   const { w } = at;
@@ -56,13 +60,16 @@ export default function PortfolioPage() {
         title="Portfolio"
         lead="The whole book in one view: what is insured, what a flood of each rarity would cost before and after policy terms and reinsurance, and where the risk is concentrated."
         right={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {auth?.role === "underwriter" && <a href="#underwriter-what-if" className="border border-river bg-river px-3 py-1.5 text-sm font-semibold text-white hover:bg-lake">What-if analysis ↓</a>}
             <Badge kind="real">Hazard: JRC</Badge>
             <Badge kind="synthetic">Buildings: synthetic</Badge>
             <Badge kind="assumption">Terms: illustrative</Badge>
           </div>
         }
       />
+
+      {auth?.role === "underwriter" && <UnderwriterWhatIf portfolio={portfolio} rp={rp} />}
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
         <b className="text-ink">Portfolio storage:</b>

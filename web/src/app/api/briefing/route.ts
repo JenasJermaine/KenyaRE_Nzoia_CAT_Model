@@ -1,7 +1,7 @@
 import { briefingSystemPrompt, templateBriefing, type BriefingPayload } from "@/lib/briefing";
 import { scanForInjection, wrapUntrusted } from "@/lib/injection";
 import { audit } from "@/lib/server/audit";
-import { requireUser } from "@/lib/server/auth";
+import { requireRoles } from "@/lib/server/auth";
 import { aiFailure } from "@/lib/server/errors";
 import { chat, llmConfig } from "@/lib/server/llm";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
@@ -15,7 +15,7 @@ function strings(value: unknown): string[] {
 }
 
 export async function POST(request: Request) {
-  const guard = requireUser(request);
+  const guard = requireRoles(request, ["underwriter"]);
   if (!guard.ok) return guard.response;
   const body = (await request.json().catch(() => null)) as { payload?: unknown; forceTemplate?: unknown } | null;
   const parsed = briefingPayloadSchema.safeParse(body?.payload);

@@ -50,7 +50,7 @@ export default function Methodology() {
     <div className="space-y-6">
       <PageHeader
         title="Model & assumptions"
-        lead="Everything an underwriter, judge or county officer needs to decide how far to trust the numbers: what is real, what is synthetic, how the AI is explained, every assumption, and what the model cannot see."
+        lead="Everything an underwriter, cedant or disaster manager needs to decide how far to trust the numbers: what is real, what is synthetic, how the AI is explained, every assumption, and what the model cannot see."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -196,39 +196,18 @@ export function OfferInput({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-grey">Or try:</span>
-        {EXAMPLES.map((ex) => (
-          <button
-            key={ex.label}
-            type="button"
-            onClick={() => void loadExample(ex)}
-            title={ex.credit ? `Sample photo: ${ex.credit}` : undefined}
-            className={cx("border px-2.5 py-1 text-xs hover:border-ink hover:text-ink", ex.photo ? "border-river text-river" : "border-slate-300 text-grey")}
-          >
-            {ex.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 border-l-4 border-river bg-navy-50 px-4 py-3">
         <button
           type="button"
           disabled={busy || preparing || !canExtract}
           onClick={() => onExtract(false)}
-          className="rounded-[10px] bg-river px-5 py-2.5 text-sm font-semibold text-white hover:bg-river-700 disabled:opacity-50"
+          className="bg-river px-5 py-2.5 text-sm font-semibold text-white hover:bg-river-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           {busy
             ? photos.length
-              ? "Reading the offer and photos…"
-              : "Reading the offer…"
-            : llmOn === null
-              ? "Extract buildings"
-              : llmOn
-                ? photos.length
-                  ? `Extract buildings with AI (+${photos.length} photo${photos.length > 1 ? "s" : ""})`
-                  : "Extract buildings with AI"
-                : "Extract buildings (rule-based)"}
+              ? "Analyzing offer and photos…"
+              : "Analyzing offer…"
+            : "Analyze offer and show building risks"}
         </button>
         {llmOn && (
           <button
@@ -240,7 +219,25 @@ export function OfferInput({
             Compare: keyword parser (no AI)
           </button>
         )}
-        {busy && <Spinner label="Free-tier Gemini can take up to a minute on long documents" />}
+        <span className="text-xs text-slate-600">
+          {canExtract ? "Review the extracted buildings and losses before deciding whether to accept." : "Enter offer text, upload a document, or add building photos to enable analysis."}
+        </span>
+      </div>
+      {busy && <Spinner label="Free-tier Gemini can take up to a minute on long documents" />}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-grey">Or load an example:</span>
+        {EXAMPLES.map((ex) => (
+          <button
+            key={ex.label}
+            type="button"
+            onClick={() => void loadExample(ex)}
+            title={ex.credit ? `Sample photo: ${ex.credit}` : undefined}
+            className={cx("border px-2.5 py-1 text-xs hover:border-ink hover:text-ink", ex.photo ? "border-river text-river" : "border-slate-300 text-grey")}
+          >
+            {ex.label}
+          </button>
+        ))}
       </div>
     </div>
   );

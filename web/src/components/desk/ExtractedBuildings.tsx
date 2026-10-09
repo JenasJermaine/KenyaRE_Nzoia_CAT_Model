@@ -51,6 +51,7 @@ export function ExtractedBuildings({
 }) {
   const photoGroups = groups.filter((g) => g.photo).length;
   const conflicts = groups.reduce((a, g) => a + (g.photo?.conflicts.length ?? 0), 0);
+  const notes = resp.warnings.filter((warning) => !warning.startsWith("The AI extractor could not be used."));
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -109,10 +110,10 @@ export function ExtractedBuildings({
         </div>
       )}
 
-      {resp.warnings.length > 0 && (
+      {notes.length > 0 && (
         <Callout tone="warn" title="Notes from the extraction">
           <ul className="list-disc pl-4">
-            {resp.warnings.map((w, i) => (
+            {notes.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
           </ul>

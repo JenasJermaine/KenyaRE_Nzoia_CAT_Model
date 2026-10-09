@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ingestResponseSchema, ingestSystemPrompt, ruleBasedParse, sanitizeGroups } from "@/lib/ingest";
 import { scanForInjection, wrapUntrusted } from "@/lib/injection";
 import { audit } from "@/lib/server/audit";
-import { requireUser } from "@/lib/server/auth";
+import { requireRoles } from "@/lib/server/auth";
 import { aiFailure } from "@/lib/server/errors";
 import { chat, llmConfig } from "@/lib/server/llm";
 import { placeNames } from "@/lib/server/gazetteer";
@@ -46,7 +46,7 @@ function sourceHash(text: string, images: IngestImage[]) {
 }
 
 export async function POST(request: Request) {
-  const guard = requireUser(request);
+  const guard = requireRoles(request, ["underwriter", "cedant"]);
   if (!guard.ok) return guard.response;
   const body = ingestBodySchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return Response.json({ error: `The request was not understood: ${describeIssue(body.error)}.` }, { status: 400 });

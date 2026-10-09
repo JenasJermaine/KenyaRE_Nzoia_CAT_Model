@@ -58,6 +58,32 @@ export const ingestBodySchema = z.object({
   images: z.array(z.unknown()).optional().default([]),
 });
 
+const submissionGroupSchema = z.object({
+  count: z.number().int().min(1).max(500),
+  housing_class: z.enum(HOUSING_CLASSES),
+  place: z.string().max(120).nullable(),
+  lat: z.number().min(-5).max(5).nullable(),
+  lon: z.number().min(30).max(40).nullable(),
+  near_river: z.boolean(),
+  floor_area_m2: z.number().positive().max(1_000_000).nullable(),
+  cost_per_m2_kes: z.number().positive().max(10_000_000).nullable(),
+  tiv_kes_each: z.number().positive().max(MAX_TIV_EACH_KES).nullable(),
+  plinth_m: z.number().min(0).max(20),
+  occupancy: z.string().max(120).nullable(),
+  evidence: z.string().max(2000),
+  confidence: z.number().min(0).max(1),
+  assumptions: z.array(z.string().max(300)).max(20),
+  condition: z.enum(CONDITIONS).nullable().optional(),
+  photo: z.object({
+    refs: z.array(z.number().int().min(1).max(20)).max(20),
+    fields: z.array(z.enum(["housing_class", "plinth_m", "condition"])).max(5),
+    observations: z.string().max(800),
+    conflicts: z.array(z.string().max(300)).max(6),
+  }).nullable().optional(),
+});
+
+export const cedantRiskSchema = z.object({ groups: z.array(submissionGroupSchema).min(1).max(50) });
+
 export const imageSchema = z.object({
   name: z.string().optional(),
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
@@ -68,10 +94,9 @@ export const loginSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(2, "Enter your name (at least 2 characters).")
-    .max(40, "Use at most 40 characters for your name.")
-    .regex(/^[\p{L}\p{N} .'-]+$/u, "Use letters, digits, spaces, dots, hyphens or apostrophes in your name."),
-  passcode: z.string().min(1, "Enter the team passcode.").max(200),
+    .email("Choose one of the demo account email addresses.")
+    .max(120),
+  passcode: z.string().min(1, "Enter the demo password.").max(200),
 });
 
 const offerBuildingSchema = z.object({
